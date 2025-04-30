@@ -8,7 +8,7 @@ export const handler = async (event: SNSEvent) => {
   for (const record of event.Records) {
     const message = JSON.parse(record.Sns.Message);
 
-    const recipient = message.email; // Assume email provided in message
+    const recipient = message.email; 
     const status = message.update.status;
     const reason = message.update.reason;
 
