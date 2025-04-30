@@ -40,12 +40,10 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
     });
-
-    const newImageEventSource = new events.SqsEventSource(queue, {
+    processImageFn.addEventSource(new events.SqsEventSource(queue, {
       batchSize: 5,
       maxBatchingWindow: cdk.Duration.seconds(5),
-    });
-    processImageFn.addEventSource(newImageEventSource);
+    }));
     imagesBucket.grantRead(processImageFn);
 
     const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
@@ -57,8 +55,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         forceDockerBundling: false,
       },
     });
-    const dlqEventSource = new events.SqsEventSource(deadLetterQueue);
-    removeImageFn.addEventSource(dlqEventSource);
+    removeImageFn.addEventSource(new events.SqsEventSource(deadLetterQueue));
     imagesBucket.grantDelete(removeImageFn);
 
     const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
@@ -83,6 +80,8 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn));
     imagesTable.grantWriteData(addMetadataFn);
 
+    const statusChangedTopic = new sns.Topic(this, 'StatusChangedTopic');
+
     const updateStatusFn = new lambdanode.NodejsFunction(this, 'UpdateStatusFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/updateStatus.ts`,
@@ -93,10 +92,26 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       },
       environment: {
         TABLE_NAME: imagesTable.tableName,
+        NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn));
     imagesTable.grantWriteData(updateStatusFn);
+    statusChangedTopic.grantPublish(updateStatusFn);
+
+    const confirmationMailerFn = new lambdanode.NodejsFunction(this, 'ConfirmationMailerFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/confirmationMailer.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      bundling: {
+        forceDockerBundling: false,
+      },
+      environment: {
+        SENDER_EMAIL: "20109222@mail.wit.ie", 
+      },
+    });
+    statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn));
 
     new cdk.CfnOutput(this, 'bucketName', {
       value: imagesBucket.bucketName,
