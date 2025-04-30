@@ -6,6 +6,7 @@ import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdanode from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as events from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 
 export class PhotoGalleryAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -65,5 +66,11 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     
     imagesBucket.grantDelete(removeImageFn);
 
+    const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
   }
+  
 }
