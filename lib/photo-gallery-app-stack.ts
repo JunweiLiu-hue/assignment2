@@ -7,6 +7,9 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdanode from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as events from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+
 
 export class PhotoGalleryAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -18,11 +21,11 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       queueName: 'image-dlq',
       retentionPeriod: cdk.Duration.days(3),
     });
-    
+
     const queue = new sqs.Queue(this, 'img-created-queue', {
       receiveMessageWaitTime: cdk.Duration.seconds(5),
       deadLetterQueue: {
-        maxReceiveCount: 2, 
+        maxReceiveCount: 2,
         queue: deadLetterQueue,
       },
     });
@@ -60,10 +63,10 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         forceDockerBundling: false,
       },
     });
-    
+
     const dlqEventSource = new events.SqsEventSource(deadLetterQueue);
     removeImageFn.addEventSource(dlqEventSource);
-    
+
     imagesBucket.grantDelete(removeImageFn);
 
     const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
@@ -71,6 +74,25 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    const metadataTopic = new sns.Topic(this, 'MetadataTopic');
+
+    const addMetadataFn = new lambdanode.NodejsFunction(this, 'AddMetadataFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/addMetadata.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      bundling: {
+        forceDockerBundling: false,
+      },
+      environment: {
+        TABLE_NAME: imagesTable.tableName,
+      },
+    });
+
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn));
+
+    imagesTable.grantWriteData(addMetadataFn);
+
   }
-  
+
 }
