@@ -50,7 +50,20 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       value: imagesBucket.bucketName,
     });
 
+    const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/removeImage.ts`,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      bundling: {
+        forceDockerBundling: false,
+      },
+    });
     
+    const dlqEventSource = new events.SqsEventSource(deadLetterQueue);
+    removeImageFn.addEventSource(dlqEventSource);
+    
+    imagesBucket.grantDelete(removeImageFn);
 
   }
 }
