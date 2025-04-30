@@ -10,7 +10,6 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
-
 export class PhotoGalleryAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -47,12 +46,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       maxBatchingWindow: cdk.Duration.seconds(5),
     });
     processImageFn.addEventSource(newImageEventSource);
-
     imagesBucket.grantRead(processImageFn);
-
-    new cdk.CfnOutput(this, 'bucketName', {
-      value: imagesBucket.bucketName,
-    });
 
     const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -63,10 +57,8 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         forceDockerBundling: false,
       },
     });
-
     const dlqEventSource = new events.SqsEventSource(deadLetterQueue);
     removeImageFn.addEventSource(dlqEventSource);
-
     imagesBucket.grantDelete(removeImageFn);
 
     const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
@@ -88,11 +80,26 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         TABLE_NAME: imagesTable.tableName,
       },
     });
-
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn));
-
     imagesTable.grantWriteData(addMetadataFn);
 
-  }
+    const updateStatusFn = new lambdanode.NodejsFunction(this, 'UpdateStatusFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/updateStatus.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      bundling: {
+        forceDockerBundling: false,
+      },
+      environment: {
+        TABLE_NAME: imagesTable.tableName,
+      },
+    });
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn));
+    imagesTable.grantWriteData(updateStatusFn);
 
+    new cdk.CfnOutput(this, 'bucketName', {
+      value: imagesBucket.bucketName,
+    });
+  }
 }
