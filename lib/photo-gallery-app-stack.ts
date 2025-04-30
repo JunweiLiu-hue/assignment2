@@ -13,8 +13,17 @@ export class PhotoGalleryAppStack extends cdk.Stack {
 
     const imagesBucket = new s3.Bucket(this, 'images');
 
+    const deadLetterQueue = new sqs.Queue(this, 'image-dlq', {
+      queueName: 'image-dlq',
+      retentionPeriod: cdk.Duration.days(3),
+    });
+    
     const queue = new sqs.Queue(this, 'img-created-queue', {
       receiveMessageWaitTime: cdk.Duration.seconds(5),
+      deadLetterQueue: {
+        maxReceiveCount: 2, 
+        queue: deadLetterQueue,
+      },
     });
 
     imagesBucket.addEventNotification(
@@ -40,5 +49,8 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'bucketName', {
       value: imagesBucket.bucketName,
     });
+
+    
+
   }
 }
