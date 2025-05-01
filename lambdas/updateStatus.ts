@@ -10,26 +10,29 @@ const tableName = process.env.TABLE_NAME!;
 export const handler = async (event: SNSEvent) => {
   for (const record of event.Records) {
     const body = JSON.parse(record.Sns.Message);
+    const metadataType = record.Sns.MessageAttributes?.metadata_type?.Value;
 
-    try {
-      const updateCommand = new UpdateItemCommand({
-        TableName: tableName,
-        Key: { id: { S: body.id } },
-        UpdateExpression: "SET #s = :s, #r = :r",
-        ExpressionAttributeNames: {
-          "#s": "status",
-          "#r": "reason",
-        },
-        ExpressionAttributeValues: {
-          ":s": { S: body.update.status },
-          ":r": { S: body.update.reason },
-        },
-      });
+    if (metadataType === "status") {
+      try {
+        const updateCommand = new UpdateItemCommand({
+          TableName: tableName,
+          Key: { id: { S: body.id } },
+          UpdateExpression: "SET #s = :s",
+          ExpressionAttributeNames: {
+            "#s": "status",
+          },
+          ExpressionAttributeValues: {
+            ":s": { S: body.value },
+          },
+        });
 
-      await dynamo.send(updateCommand);
-      console.log(`✅ Status updated for ${body.id}`);
-    } catch (err) {
-      console.error("❌ Failed to update status", err);
+        await dynamo.send(updateCommand);
+        console.log(`✅ Status updated for ${body.id} to ${body.value}`);
+      } catch (err) {
+        console.error("❌ Failed to update status", err);
+      }
+    } else {
+      console.warn("⚠️ Ignored message without 'status' metadata_type");
     }
   }
 };
