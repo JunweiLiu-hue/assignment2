@@ -2,8 +2,9 @@
     "id": "Cao-Cao.jpeg",
     "date": "01/05/2025",
     "update": {
-      "status": "APPROVED",
+      "status": "REJECTED",
       "reason": "Image too blurry"
-    }
+    },
+    "email": "your@email.com"
   }
   
