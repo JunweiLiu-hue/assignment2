@@ -9,31 +9,38 @@ const tableName = process.env.TABLE_NAME!;
 
 export const handler = async (event: SNSEvent) => {
   for (const record of event.Records) {
-    const body = JSON.parse(record.Sns.Message);
-    const metadataType = record.Sns.MessageAttributes?.metadata_type?.Value;
-
-    if (!metadataType || !["Caption", "Date", "Name"].includes(metadataType)) {
-      console.warn("Invalid or missing metadata_type");
-      continue;
-    }
-
     try {
-      const updateParams = new UpdateItemCommand({
+      const body = JSON.parse(record.Sns.Message);
+      const metadataTypeRaw = record.Sns.MessageAttributes?.metadata_type?.Value;
+
+      if (!body.id || !body.value || !metadataTypeRaw) {
+        console.warn("⚠️ Missing id, value or metadata_type in SNS message.");
+        continue;
+      }
+
+      const metadataType = metadataTypeRaw.toLowerCase();
+      const allowedTypes = ["caption", "date", "name"];
+      if (!allowedTypes.includes(metadataType)) {
+        console.warn(`⚠️ Unsupported metadata_type: ${metadataTypeRaw}`);
+        continue;
+      }
+
+      const updateCommand = new UpdateItemCommand({
         TableName: tableName,
         Key: { id: { S: body.id } },
-        UpdateExpression: `SET #attr = :val`,
+        UpdateExpression: "SET #attr = :val",
         ExpressionAttributeNames: {
-          "#attr": metadataType,
+          "#attr": metadataType.charAt(0).toUpperCase() + metadataType.slice(1), // Caption, Date, Name
         },
         ExpressionAttributeValues: {
           ":val": { S: body.value },
         },
       });
 
-      await dynamo.send(updateParams);
-      console.log(`✅ Updated ${metadataType} for ${body.id}`);
+      await dynamo.send(updateCommand);
+      console.log(`✅ Updated ${metadataType} for ${body.id}: ${body.value}`);
     } catch (error) {
-      console.error("❌ Failed to update metadata", error);
+      console.error("❌ Failed to process metadata message:", error);
     }
   }
 };
