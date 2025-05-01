@@ -19,6 +19,11 @@ export const handler: SQSHandler = async (event) => {
         const srcBucket = s3e.bucket.name;
         const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
 
+        if (!srcKey.endsWith('.jpeg') && !srcKey.endsWith('.png')) {
+          console.error(`❌ Invalid file type: ${srcKey}`);
+          throw new Error(`Unsupported file type: ${srcKey}`);
+        }
+
         try {
           const params: GetObjectCommandInput = {
             Bucket: srcBucket,
