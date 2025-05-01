@@ -9,6 +9,7 @@ import * as events from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class PhotoGalleryAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -108,10 +109,17 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         forceDockerBundling: false,
       },
       environment: {
-        SENDER_EMAIL: "20109222@mail.wit.ie", 
+        SENDER_EMAIL: "20109222@mail.wit.ie",
       },
     });
     statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn));
+
+    confirmationMailerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"]
+      })
+    );
 
     new cdk.CfnOutput(this, 'bucketName', {
       value: imagesBucket.bucketName,
