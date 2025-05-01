@@ -10,7 +10,7 @@ const tableName = process.env.TABLE_NAME!;
 export const handler = async (event: SQSEvent) => {
   for (const record of event.Records) {
     try {
-      // ✅ 只有一层 JSON.parse 就够了
+
       const s3Event = JSON.parse(record.body);
 
       for (const s3Record of s3Event.Records) {
