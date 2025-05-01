@@ -35,17 +35,26 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       new s3n.SqsDestination(queue)
     );
 
+    const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     const processImageFn = new lambdanode.NodejsFunction(this, 'ProcessImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/processImage.ts`,
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
+      environment: {
+        TABLE_NAME: imagesTable.tableName, // ✅ 修复点
+      },
     });
     processImageFn.addEventSource(new events.SqsEventSource(queue, {
       batchSize: 5,
       maxBatchingWindow: cdk.Duration.seconds(5),
     }));
     imagesBucket.grantRead(processImageFn);
+    imagesTable.grantWriteData(processImageFn); // ✅ 记得授权写表
 
     const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -58,11 +67,6 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     });
     removeImageFn.addEventSource(new events.SqsEventSource(deadLetterQueue));
     imagesBucket.grantDelete(removeImageFn);
-
-    const imagesTable = new dynamodb.Table(this, 'ImagesTable', {
-      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
 
     const metadataTopic = new sns.Topic(this, 'MetadataTopic');
 
@@ -117,7 +121,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["ses:SendEmail", "ses:SendRawEmail"],
-        resources: ["*"]
+        resources: ["*"],
       })
     );
 

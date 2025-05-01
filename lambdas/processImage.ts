@@ -1,4 +1,4 @@
-import { S3Event } from "aws-lambda";
+import { SQSEvent } from "aws-lambda";
 import {
   DynamoDBClient,
   PutItemCommand,
@@ -7,27 +7,34 @@ import {
 const dynamo = new DynamoDBClient({});
 const tableName = process.env.TABLE_NAME!;
 
-export const handler = async (event: S3Event) => {
+export const handler = async (event: SQSEvent) => {
   for (const record of event.Records) {
-    const s3ObjectKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
-    
     try {
-      const putCmd = new PutItemCommand({
-        TableName: tableName,
-        Item: {
-          id: { S: s3ObjectKey },
-          caption: { S: "" },
-          status: { S: "PENDING" },
-          reason: { S: "" },
-        },
-        ConditionExpression: "attribute_not_exists(id)",
-      });
+      // ✅ 只有一层 JSON.parse 就够了
+      const s3Event = JSON.parse(record.body);
 
-      await dynamo.send(putCmd);
-      console.log(`✅ Inserted image record for ${s3ObjectKey}`);
+      for (const s3Record of s3Event.Records) {
+        const s3ObjectKey = decodeURIComponent(
+          s3Record.s3.object.key.replace(/\+/g, " ")
+        );
+
+        const putCmd = new PutItemCommand({
+          TableName: tableName,
+          Item: {
+            id: { S: s3ObjectKey },
+            caption: { S: "" },
+            status: { S: "PENDING" },
+            reason: { S: "" },
+          },
+          ConditionExpression: "attribute_not_exists(id)",
+        });
+
+        await dynamo.send(putCmd);
+        console.log(`✅ Inserted image record for ${s3ObjectKey}`);
+      }
     } catch (err: any) {
       if (err.name === "ConditionalCheckFailedException") {
-        console.log(`⚠️ Record for ${s3ObjectKey} already exists`);
+        console.log(`⚠️ Record already exists, skipping`);
       } else {
         console.error("❌ Failed to insert image record:", err);
       }
