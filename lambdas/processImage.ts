@@ -1,43 +1,36 @@
-import { SQSHandler } from "aws-lambda";
+import { S3Event } from "aws-lambda";
 import {
-  GetObjectCommand,
-  GetObjectCommandInput,
-  S3Client,
-} from "@aws-sdk/client-s3";
+  DynamoDBClient,
+  PutItemCommand,
+} from "@aws-sdk/client-dynamodb";
 
-const s3 = new S3Client();
+const dynamo = new DynamoDBClient({});
+const tableName = process.env.TABLE_NAME!;
 
-export const handler: SQSHandler = async (event) => {
-  console.log("Received event:", JSON.stringify(event));
-
+export const handler = async (event: S3Event) => {
   for (const record of event.Records) {
-    const recordBody = JSON.parse(record.body);
+    const s3ObjectKey = record.s3.object.key;
 
-    if (recordBody.Records) {
-      for (const messageRecord of recordBody.Records) {
-        const s3e = messageRecord.s3;
-        const srcBucket = s3e.bucket.name;
-        const srcKey = decodeURIComponent(s3e.object.key.replace(/\+/g, " "));
+    try {
+      const putCmd = new PutItemCommand({
+        TableName: tableName,
+        Item: {
+          id: { S: decodeURIComponent(s3ObjectKey.replace(/\+/g, ' ')) },
+          caption: { S: "" },        
+          status: { S: "PENDING" },   
+          reason: { S: "" }          
+        },
+        ConditionExpression: "attribute_not_exists(id)" 
+      });
 
-        if (!srcKey.endsWith('.jpeg') && !srcKey.endsWith('.png')) {
-          console.error(`❌ Invalid file type: ${srcKey}`);
-          throw new Error(`Unsupported file type: ${srcKey}`);
-        }
-
-        try {
-          const params: GetObjectCommandInput = {
-            Bucket: srcBucket,
-            Key: srcKey,
-          };
-
-          const origImage = await s3.send(new GetObjectCommand(params));
-          console.log(`✅ Image downloaded successfully: ${srcKey}`);
-        } catch (error) {
-          console.error(`❌ Failed to get image ${srcKey} from bucket ${srcBucket}`, error);
-        }
+      await dynamo.send(putCmd);
+      console.log(`✅ Inserted image record for ${s3ObjectKey}`);
+    } catch (err: any) {
+      if (err.name === "ConditionalCheckFailedException") {
+        console.log(`⚠️ Record for ${s3ObjectKey} already exists`);
+      } else {
+        console.error("❌ Failed to insert image record:", err);
       }
-    } else {
-      console.warn("⚠️ No 'Records' field in SQS message body.");
     }
   }
 };
