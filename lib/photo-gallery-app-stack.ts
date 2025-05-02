@@ -40,6 +40,9 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    const metadataTopic = new sns.Topic(this, 'MetadataTopic');
+    const statusChangedTopic = new sns.Topic(this, 'StatusChangedTopic');
+
     const processImageFn = new lambdanode.NodejsFunction(this, 'ProcessImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/processImage.ts`,
@@ -47,6 +50,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       memorySize: 128,
       environment: {
         TABLE_NAME: imagesTable.tableName,
+        NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
     processImageFn.addEventSource(new events.SqsEventSource(queue, {
@@ -54,30 +58,24 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       maxBatchingWindow: cdk.Duration.seconds(5),
     }));
     imagesBucket.grantRead(processImageFn);
+    imagesBucket.grantDelete(processImageFn);
     imagesTable.grantWriteData(processImageFn);
+    statusChangedTopic.grantPublish(processImageFn);
 
     const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/removeImage.ts`,
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
-      bundling: {
-        forceDockerBundling: false,
-      },
     });
     removeImageFn.addEventSource(new events.SqsEventSource(deadLetterQueue));
     imagesBucket.grantDelete(removeImageFn);
-
-    const metadataTopic = new sns.Topic(this, 'MetadataTopic');
 
     const addMetadataFn = new lambdanode.NodejsFunction(this, 'AddMetadataFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/addMetadata.ts`,
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
-      bundling: {
-        forceDockerBundling: false,
-      },
       environment: {
         TABLE_NAME: imagesTable.tableName,
       },
@@ -88,40 +86,31 @@ export class PhotoGalleryAppStack extends cdk.Stack {
           allowlist: ["caption"],
         }),
       },
-    }));    
+    }));
     imagesTable.grantWriteData(addMetadataFn);
-
-    const statusChangedTopic = new sns.Topic(this, 'StatusChangedTopic');
 
     const updateStatusFn = new lambdanode.NodejsFunction(this, 'UpdateStatusFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/updateStatus.ts`,
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
-      bundling: {
-        forceDockerBundling: false,
-      },
       environment: {
         TABLE_NAME: imagesTable.tableName,
         NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
-    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn, {
+    statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn, {
       filterPolicy: {
-        metadata_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['status'] }),
+        notification_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['status'] }),
       },
     }));
     imagesTable.grantWriteData(updateStatusFn);
-    statusChangedTopic.grantPublish(updateStatusFn);
 
     const confirmationMailerFn = new lambdanode.NodejsFunction(this, 'ConfirmationMailerFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/confirmationMailer.ts`,
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
-      bundling: {
-        forceDockerBundling: false,
-      },
       environment: {
         SENDER_EMAIL: "20109222@mail.wit.ie",
       },
@@ -131,11 +120,10 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         notification_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['email'] }),
       },
     }));
-
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["ses:SendEmail", "ses:SendRawEmail"],
-        resources: ["*"]
+        resources: ["*"],
       })
     );
 
