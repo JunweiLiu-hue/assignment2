@@ -46,7 +46,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
       environment: {
-        TABLE_NAME: imagesTable.tableName, // ✅ 修复点
+        TABLE_NAME: imagesTable.tableName,
       },
     });
     processImageFn.addEventSource(new events.SqsEventSource(queue, {
@@ -54,7 +54,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       maxBatchingWindow: cdk.Duration.seconds(5),
     }));
     imagesBucket.grantRead(processImageFn);
-    imagesTable.grantWriteData(processImageFn); // ✅ 记得授权写表
+    imagesTable.grantWriteData(processImageFn);
 
     const removeImageFn = new lambdanode.NodejsFunction(this, 'RemoveImageFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -82,7 +82,13 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         TABLE_NAME: imagesTable.tableName,
       },
     });
-    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn));
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ["caption"],
+        }),
+      },
+    }));    
     imagesTable.grantWriteData(addMetadataFn);
 
     const statusChangedTopic = new sns.Topic(this, 'StatusChangedTopic');
@@ -100,7 +106,11 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
-    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn));
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['status'] }),
+      },
+    }));
     imagesTable.grantWriteData(updateStatusFn);
     statusChangedTopic.grantPublish(updateStatusFn);
 
@@ -116,12 +126,16 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         SENDER_EMAIL: "20109222@mail.wit.ie",
       },
     });
-    statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn));
+    statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn, {
+      filterPolicy: {
+        notification_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['email'] }),
+      },
+    }));
 
     confirmationMailerFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["ses:SendEmail", "ses:SendRawEmail"],
-        resources: ["*"],
+        resources: ["*"]
       })
     );
 

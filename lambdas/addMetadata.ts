@@ -30,7 +30,7 @@ export const handler = async (event: SNSEvent) => {
         Key: { id: { S: body.id } },
         UpdateExpression: "SET #attr = :val",
         ExpressionAttributeNames: {
-          "#attr": metadataType.charAt(0).toUpperCase() + metadataType.slice(1), // Caption, Date, Name
+          "#attr": metadataType.charAt(0).toUpperCase() + metadataType.slice(1), 
         },
         ExpressionAttributeValues: {
           ":val": { S: body.value },
