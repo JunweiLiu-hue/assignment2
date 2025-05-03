@@ -1,34 +1,41 @@
 import { SNSEvent } from "aws-lambda";
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import {
+  SESClient,
+  SendEmailCommand,
+} from "@aws-sdk/client-ses";
 
-const ses = new SESClient({});
-const sender = process.env.SENDER_EMAIL!;
+const ses = new SESClient({ region: "eu-west-1" }); 
+
+const senderEmail = process.env.SENDER_EMAIL!;
+const receiverEmail = process.env.RECEIVER_EMAIL!;
 
 export const handler = async (event: SNSEvent) => {
   for (const record of event.Records) {
-    const message = JSON.parse(record.Sns.Message);
-
-    const recipient = message.email; 
-    const status = message.update.status;
-    const reason = message.update.reason;
-
-    const subject = `Your photo review result: ${status}`;
-    const body = `Hello,\n\nYour photo "${message.id}" was reviewed.\nStatus: ${status}\nReason: ${reason}`;
-
-    const sendCmd = new SendEmailCommand({
-      Destination: { ToAddresses: [recipient] },
-      Message: {
-        Subject: { Data: subject },
-        Body: { Text: { Data: body } },
-      },
-      Source: sender,
-    });
-
     try {
-      await ses.send(sendCmd);
-      console.log(`📨 Email sent to ${recipient}`);
+      const message = JSON.parse(record.Sns.Message);
+      const { id, update } = message;
+
+      const emailParams = {
+        Destination: {
+          ToAddresses: [receiverEmail],
+        },
+        Message: {
+          Subject: {
+            Data: `Image status update for ${id}`,
+          },
+          Body: {
+            Text: {
+              Data: `The image ${id} has been marked as ${update.status}.\nReason: ${update.reason || "None"}`,
+            },
+          },
+        },
+        Source: senderEmail,
+      };
+
+      await ses.send(new SendEmailCommand(emailParams));
+      console.log(`✅ Email sent for image: ${id}`);
     } catch (err) {
-      console.error(`❌ Failed to send email to ${recipient}`, err);
+      console.error("❌ Failed to send email:", err);
     }
   }
 };

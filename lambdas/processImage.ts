@@ -24,12 +24,12 @@ const allowedExtensions = ['.jpeg', '.png'];
 export const handler = async (event: SQSEvent) => {
   for (const record of event.Records) {
     try {
-      const s3Event = JSON.parse(record.body); 
+      const s3Event = JSON.parse(record.body);
 
       for (const s3Record of s3Event.Records) {
         const bucket = s3Record.s3.bucket.name;
         const rawKey = s3Record.s3.object.key;
-        const objectKey = decodeURIComponent(rawKey.replace(/\+/g, " ")); 
+        const objectKey = decodeURIComponent(rawKey.replace(/\+/g, " "));
         const ext = objectKey.substring(objectKey.lastIndexOf('.')).toLowerCase();
         const isValidImage = allowedExtensions.includes(ext);
 
@@ -41,7 +41,7 @@ export const handler = async (event: SQSEvent) => {
             status: { S: "PENDING" },
             reason: { S: "" },
           },
-          ConditionExpression: "attribute_not_exists(id)", 
+          ConditionExpression: "attribute_not_exists(id)",
         });
 
         await dynamo.send(putCmd);

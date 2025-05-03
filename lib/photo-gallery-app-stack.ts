@@ -83,7 +83,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn, {
       filterPolicy: {
         metadata_type: sns.SubscriptionFilter.stringFilter({
-          allowlist: ["caption"],
+          allowlist: ['caption'],
         }),
       },
     }));
@@ -101,10 +101,30 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     });
     statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn, {
       filterPolicy: {
-        notification_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['status'] }),
+        notification_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ['status'],
+        }),
       },
     }));
     imagesTable.grantWriteData(updateStatusFn);
+
+    const updateValueFn = new lambdanode.NodejsFunction(this, 'UpdateValueFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/updateValue.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: imagesTable.tableName,
+      },
+    });
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateValueFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ['value'],
+        }),
+      },
+    }));
+    imagesTable.grantWriteData(updateValueFn);
 
     const confirmationMailerFn = new lambdanode.NodejsFunction(this, 'ConfirmationMailerFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -113,19 +133,20 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       memorySize: 128,
       environment: {
         SENDER_EMAIL: "20109222@mail.wit.ie",
+        RECEIVER_EMAIL: "chaselliu0328@gmail.com",
       },
     });
     statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn, {
       filterPolicy: {
-        notification_type: sns.SubscriptionFilter.stringFilter({ allowlist: ['email'] }),
+        notification_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ['email'],
+        }),
       },
     }));
-    confirmationMailerFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["ses:SendEmail", "ses:SendRawEmail"],
-        resources: ["*"],
-      })
-    );
+    confirmationMailerFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+      resources: ['*'],
+    }));
 
     new cdk.CfnOutput(this, 'bucketName', {
       value: imagesBucket.bucketName,
