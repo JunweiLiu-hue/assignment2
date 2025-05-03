@@ -53,9 +53,11 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
-    processImageFn.addEventSource(new events.SqsEventSource(queue));
+
+    processImageFn.addEventSource(new events.SqsEventSource(queue, {
+      reportBatchItemFailures: true,
+    }));
     imagesBucket.grantRead(processImageFn);
-    imagesBucket.grantDelete(processImageFn);
     imagesTable.grantWriteData(processImageFn);
     statusChangedTopic.grantPublish(processImageFn);
 
@@ -65,6 +67,9 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(15),
       memorySize: 128,
     });
+
+    deadLetterQueue.grantConsumeMessages(removeImageFn);
+
     removeImageFn.addEventSource(new events.SqsEventSource(deadLetterQueue));
     imagesBucket.grantDelete(removeImageFn);
 
@@ -77,6 +82,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         TABLE_NAME: imagesTable.tableName,
       },
     });
+
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(addMetadataFn, {
       filterPolicy: {
         metadata_type: sns.SubscriptionFilter.stringFilter({
@@ -95,6 +101,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         TABLE_NAME: imagesTable.tableName,
       },
     });
+
     metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateMetadataFn, {
       filterPolicy: {
         metadata_type: sns.SubscriptionFilter.stringFilter({
@@ -114,6 +121,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
+
     statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(updateStatusFn, {
       filterPolicy: {
         notification_type: sns.SubscriptionFilter.stringFilter({
@@ -134,6 +142,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         RECEIVER_EMAIL: "chaselliu0328@gmail.com",
       },
     });
+
     statusChangedTopic.addSubscription(new subscriptions.LambdaSubscription(confirmationMailerFn, {
       filterPolicy: {
         notification_type: sns.SubscriptionFilter.stringFilter({
@@ -141,6 +150,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         }),
       },
     }));
+
     confirmationMailerFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['ses:SendEmail', 'ses:SendRawEmail'],
       resources: ['*'],
