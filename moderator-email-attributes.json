@@ -1,0 +1,7 @@
+{
+    "notification_type": {
+      "DataType": "String",
+      "StringValue": "email"
+    }
+  }
+  

@@ -53,10 +53,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
         NOTIFY_TOPIC_ARN: statusChangedTopic.topicArn,
       },
     });
-    processImageFn.addEventSource(new events.SqsEventSource(queue, {
-      batchSize: 5,
-      maxBatchingWindow: cdk.Duration.seconds(5),
-    }));
+    processImageFn.addEventSource(new events.SqsEventSource(queue));
     imagesBucket.grantRead(processImageFn);
     imagesBucket.grantDelete(processImageFn);
     imagesTable.grantWriteData(processImageFn);
@@ -89,6 +86,24 @@ export class PhotoGalleryAppStack extends cdk.Stack {
     }));
     imagesTable.grantWriteData(addMetadataFn);
 
+    const updateMetadataFn = new lambdanode.NodejsFunction(this, 'UpdateMetadataFn', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: `${__dirname}/../lambdas/updateMetadata.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: imagesTable.tableName,
+      },
+    });
+    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateMetadataFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: ['value'],
+        }),
+      },
+    }));
+    imagesTable.grantWriteData(updateMetadataFn);
+
     const updateStatusFn = new lambdanode.NodejsFunction(this, 'UpdateStatusFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: `${__dirname}/../lambdas/updateStatus.ts`,
@@ -107,24 +122,7 @@ export class PhotoGalleryAppStack extends cdk.Stack {
       },
     }));
     imagesTable.grantWriteData(updateStatusFn);
-
-    const updateValueFn = new lambdanode.NodejsFunction(this, 'UpdateValueFn', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: `${__dirname}/../lambdas/updateValue.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: imagesTable.tableName,
-      },
-    });
-    metadataTopic.addSubscription(new subscriptions.LambdaSubscription(updateValueFn, {
-      filterPolicy: {
-        metadata_type: sns.SubscriptionFilter.stringFilter({
-          allowlist: ['value'],
-        }),
-      },
-    }));
-    imagesTable.grantWriteData(updateValueFn);
+    statusChangedTopic.grantPublish(updateStatusFn);
 
     const confirmationMailerFn = new lambdanode.NodejsFunction(this, 'ConfirmationMailerFn', {
       runtime: lambda.Runtime.NODEJS_20_X,
